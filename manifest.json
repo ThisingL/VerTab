@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "VerTab",
+  "version": "1.0.0",
+  "description": "垂直标签页侧边栏 - 类似 ARC 浏览器的标签页管理体验",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab",
+    "sessions",
+    "tabGroups",
+    "favicon"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_title": "VerTab - 切换侧边栏"
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar/sidebar.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "commands": {
+    "toggle-sidebar": {
+      "suggested_key": {
+        "default": "Ctrl+B",
+        "mac": "Command+B"
+      },
+      "description": "切换侧边栏显示/隐藏"
+    }
+  }
+}
