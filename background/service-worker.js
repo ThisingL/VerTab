@@ -89,7 +89,8 @@ async function getAllTabs() {
     active: tab.active,
     pinned: tab.pinned,
     groupId: tab.groupId,
-    index: tab.index
+    index: tab.index,
+    status: tab.status || 'complete'
   }));
 }
 

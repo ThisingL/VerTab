@@ -32,11 +32,15 @@ Chrome's horizontal tab bar doesn't scale. Once you have 10+ tabs open, they bec
 - **Search** — Instantly filter tabs by title or URL
 - **Tab Groups** — Organize tabs into collapsible color-coded groups
 - **Recently Closed** — Restore tabs you accidentally closed
+- **Hover Preview** — Hover over a tab to see a screenshot or page info preview
+- **Loading State** — Tabs show a spinning indicator while navigating
 - **Right-Click Menu** — Pin, mute, duplicate, copy URL, close, and more
 - **Dark / Light Theme** — Switch themes with one click
 - **Left / Right Position** — Place the sidebar on either side
 - **Resizable** — Drag the edge to adjust sidebar width
 - **Synced State** — Width, theme, and UI state sync across all tabs in real-time
+- **Incremental Updates** — Only changed tabs are updated; no flickering or full re-renders
+- **Instant Restore** — Sidebar restores instantly on page refresh with no visible delay
 
 ## Installation
 
@@ -68,13 +72,13 @@ Chrome's horizontal tab bar doesn't scale. Once you have 10+ tabs open, they bec
 | Toggle sidebar | Click toolbar icon or `Cmd+B` / `Ctrl+B` |
 | Switch tab | Click any tab in the list |
 | Close tab | Hover a tab, click the **x** button |
-| New tab | Click **+ New Tab** at the bottom |
+| New tab | Click the **+** button at the top |
 | Search tabs | Type in the search box at the top |
 | Reorder | Drag and drop tabs |
 | Pin / Unpin | Right-click a tab → Pin |
 | Create group | Right-click → Add to group |
-| Restore closed tab | Expand "Recently Closed" at the bottom |
-| Switch theme | Click the moon icon at the bottom |
+| Restore closed tab | Expand the "Recently Closed" section |
+| Switch theme | Click the theme icon at the top |
 | Change position | Settings → Sidebar position |
 | Resize | Drag the sidebar edge |
 

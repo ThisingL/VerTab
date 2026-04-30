@@ -25,9 +25,28 @@
   async function init() {
     await loadSettings();
     await loadUIState();
+
+    // 先从缓存渲染（瞬间显示），再异步获取最新数据
+    const { cachedTabs, cachedTabGroups } = await chrome.storage.local.get({
+      cachedTabs: null,
+      cachedTabGroups: null
+    });
+    if (cachedTabs && cachedTabs.length > 0) {
+      tabs = cachedTabs;
+      tabGroups = cachedTabGroups || [];
+      renderTabs();
+      document.getElementById('tab-count').textContent = tabs.length;
+    }
+
+    // 异步获取最新数据并更新
     await refreshTabs();
     await loadRecentlyClosed();
     bindEvents();
+
+    // 初始渲染完成后启用动画
+    requestAnimationFrame(() => {
+      document.body.classList.add('animations-ready');
+    });
   }
 
   async function loadSettings() {
@@ -55,6 +74,8 @@
     renderTabs();
     // 更新标签页数量
     document.getElementById('tab-count').textContent = tabs.length;
+    // 缓存数据，下次页面刷新时可以瞬间恢复
+    chrome.storage.local.set({ cachedTabs: tabs, cachedTabGroups: tabGroups });
   }
 
   async function loadRecentlyClosed() {
@@ -74,8 +95,16 @@
     );
   }
 
+  // 用于增量更新的缓存：记录上次渲染的标签页顺序签名
+  let lastPinnedSignature = '';
+  let lastUnpinnedSignature = '';
+
+  function getTabsSignature(tabList) {
+    // 签名包含 id 和 groupId，顺序变化或标签增减都会导致签名不同
+    return tabList.map(t => `${t.id}:${t.groupId || -1}`).join(',');
+  }
+
   function renderTabs() {
-    // 记住滚动位置
     const container = document.getElementById('tabs-container');
     const scrollTop = container ? container.scrollTop : 0;
 
@@ -84,10 +113,21 @@
     const filteredPinned = filterTabs(pinned);
     const filteredUnpinned = filterTabs(unpinned);
 
+    const pinnedSig = getTabsSignature(filteredPinned);
+    const unpinnedSig = getTabsSignature(filteredUnpinned);
+
+    // 判断是否需要完全重渲染（标签页数量/顺序变化）
+    const pinnedChanged = pinnedSig !== lastPinnedSignature;
+    const unpinnedChanged = unpinnedSig !== lastUnpinnedSignature;
+
     // Render pinned tabs
     if (filteredPinned.length > 0) {
       pinnedSection.style.display = 'block';
-      pinnedTabs.innerHTML = filteredPinned.map(t => renderTabItem(t)).join('');
+      if (pinnedChanged) {
+        pinnedTabs.innerHTML = filteredPinned.map(t => renderTabItem(t)).join('');
+      } else {
+        updateTabElements(pinnedTabs, filteredPinned);
+      }
     } else {
       pinnedSection.style.display = 'none';
     }
@@ -105,30 +145,94 @@
       }
     });
 
-    let html = '';
+    if (unpinnedChanged) {
+      let html = '';
 
-    // Render groups
-    for (const [groupId, groupTabs] of Object.entries(grouped)) {
-      const group = tabGroups.find(g => g.id === parseInt(groupId));
-      if (group) {
-        html += renderTabGroup(group, groupTabs);
+      // Render groups
+      for (const [groupId, groupTabs] of Object.entries(grouped)) {
+        const group = tabGroups.find(g => g.id === parseInt(groupId));
+        if (group) {
+          html += renderTabGroup(group, groupTabs);
+        }
       }
+
+      // Render ungrouped tabs
+      html += ungrouped.map(t => renderTabItem(t)).join('');
+
+      allTabsList.innerHTML = html;
+    } else {
+      // 增量更新：只更新变化的属性
+      updateTabElements(allTabsList, filteredUnpinned);
     }
-
-    // Render ungrouped tabs
-    html += ungrouped.map(t => renderTabItem(t)).join('');
-
-    allTabsList.innerHTML = html;
 
     // Show empty state if no tabs match search
     if (filteredPinned.length === 0 && filteredUnpinned.length === 0 && searchQuery) {
       allTabsList.innerHTML = '<div class="empty-state">没有匹配的标签页</div>';
     }
 
+    // 保存签名
+    lastPinnedSignature = pinnedSig;
+    lastUnpinnedSignature = unpinnedSig;
+
     // 恢复滚动位置
     if (container) {
       container.scrollTop = scrollTop;
     }
+  }
+
+  // 增量更新已有的 tab DOM 元素（只更新 title, favicon, active, loading 状态）
+  function updateTabElements(container, tabList) {
+    tabList.forEach(tab => {
+      const el = container.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
+      if (!el) return;
+
+      // 更新 active 状态
+      if (tab.active && !el.classList.contains('active')) {
+        el.classList.add('active');
+      } else if (!tab.active && el.classList.contains('active')) {
+        el.classList.remove('active');
+      }
+
+      // 更新标题
+      const titleEl = el.querySelector('.tab-title');
+      if (titleEl && titleEl.textContent !== tab.title) {
+        titleEl.textContent = tab.title;
+        titleEl.title = tab.title;
+      }
+
+      // 更新 favicon / loading 状态
+      const faviconEl = el.querySelector('.tab-favicon, .tab-favicon-placeholder, .tab-loading-spinner');
+      if (faviconEl) {
+        if (tab.status === 'loading') {
+          // 显示加载动画
+          if (!faviconEl.classList.contains('tab-loading-spinner')) {
+            const spinner = document.createElement('div');
+            spinner.className = 'tab-loading-spinner';
+            faviconEl.replaceWith(spinner);
+          }
+        } else {
+          // 恢复 favicon
+          if (faviconEl.classList.contains('tab-loading-spinner')) {
+            const faviconSrc = getFaviconUrl(tab);
+            if (faviconSrc) {
+              const img = document.createElement('img');
+              img.className = 'tab-favicon';
+              img.src = faviconSrc;
+              img.onerror = function() {
+                this.outerHTML = '<div class="tab-favicon-placeholder"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>';
+              };
+              faviconEl.replaceWith(img);
+            }
+          } else if (faviconEl.tagName === 'IMG') {
+            // 更新 favicon URL（如果 URL 变了）
+            const newSrc = getFaviconUrl(tab);
+            if (faviconEl.src !== newSrc && newSrc) {
+              faviconEl.src = newSrc;
+            }
+          }
+        }
+      }
+    });
   }
 
   function getFaviconUrl(tab) {
@@ -140,10 +244,15 @@
   }
 
   function renderTabItem(tab) {
-    const faviconSrc = getFaviconUrl(tab);
-    const faviconHtml = faviconSrc
-      ? `<img class="tab-favicon" src="${faviconSrc}" onerror="this.outerHTML='<div class=\\'tab-favicon-placeholder\\'><svg viewBox=\\'0 0 24 24\\'><path fill=\\'currentColor\\' d=\\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z\\'/></svg></div>'"/>`
-      : `<div class="tab-favicon-placeholder"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>`;
+    let faviconHtml;
+    if (tab.status === 'loading') {
+      faviconHtml = `<div class="tab-loading-spinner"></div>`;
+    } else {
+      const faviconSrc = getFaviconUrl(tab);
+      faviconHtml = faviconSrc
+        ? `<img class="tab-favicon" src="${faviconSrc}" onerror="this.outerHTML='<div class=\\'tab-favicon-placeholder\\'><svg viewBox=\\'0 0 24 24\\'><path fill=\\'currentColor\\' d=\\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z\\'/></svg></div>'"/>`
+        : `<div class="tab-favicon-placeholder"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>`;
+    }
 
     const closeBtn = tab.pinned ? '' : `
         <button class="tab-close" data-tab-id="${tab.id}" title="关闭">
@@ -229,6 +338,9 @@
     // Search
     searchInput.addEventListener('input', (e) => {
       searchQuery = e.target.value.trim();
+      // 搜索变化时强制完全重渲染
+      lastPinnedSignature = '';
+      lastUnpinnedSignature = '';
       renderTabs();
     });
 

@@ -30,7 +30,8 @@
     createResizeHandle();
 
     if (state.sidebarVisible) {
-      showSidebar();
+      // 页面刷新恢复侧边栏时，跳过过渡动画，瞬间显示
+      showSidebar(true);
     }
   }
 
@@ -98,8 +99,14 @@
     );
   }
 
-  function showSidebar() {
+  function showSidebar(instant) {
     isVisible = true;
+
+    if (instant) {
+      // 跳过过渡动画，瞬间显示
+      document.documentElement.classList.add('vertab-no-transition');
+    }
+
     sidebar.classList.remove('vertab-hidden');
     resizeHandle.classList.remove('vertab-hidden');
     resizeHandle.style[settings.position] = settings.sidebarWidth + 'px';
@@ -112,6 +119,13 @@
       settings.sidebarWidth + 'px',
       'important'
     );
+
+    if (instant) {
+      // 强制重绘后恢复过渡，后续操作（如拖拽、切换）仍有动画
+      requestAnimationFrame(() => {
+        document.documentElement.classList.remove('vertab-no-transition');
+      });
+    }
 
     chrome.storage.local.set({ sidebarVisible: true });
   }

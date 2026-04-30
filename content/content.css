@@ -48,6 +48,12 @@ html.vertab-no-push {
   transition: margin-left 0.3s ease, margin-right 0.3s ease !important;
 }
 
+/* 页面刷新时跳过过渡动画 */
+html.vertab-no-transition,
+html.vertab-no-transition #vertab-sidebar-container {
+  transition: none !important;
+}
+
 /* 侧边栏宽度拖拽手柄 */
 #vertab-resize-handle {
   position: fixed;
