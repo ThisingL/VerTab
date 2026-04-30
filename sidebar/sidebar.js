@@ -488,6 +488,62 @@
         contextMenu.style.display = 'none';
       }
     });
+
+    // 标签页悬浮预览（通过 postMessage 让 content script 在主页面中显示）
+    let hoverTimer = null;
+    let currentHoverTabId = null;
+
+    document.addEventListener('mouseenter', async (e) => {
+      const tabItem = e.target.closest('.tab-item');
+      if (!tabItem || !tabItem.dataset.tabId) return;
+
+      const tabId = parseInt(tabItem.dataset.tabId);
+      currentHoverTabId = tabId;
+
+      // 延迟显示，避免快速划过时闪烁
+      hoverTimer = setTimeout(async () => {
+        if (currentHoverTabId !== tabId) return;
+
+        const tab = tabs.find(t => t.id === tabId);
+        if (!tab) return;
+
+        // 请求缩略图
+        const result = await chrome.runtime.sendMessage({ type: 'GET_THUMBNAIL', tabId });
+        if (currentHoverTabId !== tabId) return;
+
+        const rect = tabItem.getBoundingClientRect();
+        let hostname = '';
+        try { hostname = new URL(tab.url).hostname; } catch (e) { hostname = tab.url; }
+
+        // 发送给 content script 在主页面中显示预览
+        window.parent.postMessage({
+          type: 'SHOW_PREVIEW',
+          dataUrl: result?.dataUrl || null,
+          faviconUrl: getFaviconUrl(tab),
+          title: tab.title,
+          hostname: hostname,
+          top: rect.top
+        }, '*');
+      }, 400);
+    }, true);
+
+    document.addEventListener('mouseleave', (e) => {
+      const tabItem = e.target.closest('.tab-item');
+      if (!tabItem) return;
+
+      clearTimeout(hoverTimer);
+      currentHoverTabId = null;
+      window.parent.postMessage({ type: 'HIDE_PREVIEW' }, '*');
+    }, true);
+
+    // 点击标签时也隐藏预览
+    document.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.tab-item')) {
+        clearTimeout(hoverTimer);
+        currentHoverTabId = null;
+        window.parent.postMessage({ type: 'HIDE_PREVIEW' }, '*');
+      }
+    });
   }
 
   // Utility
@@ -496,6 +552,22 @@
     div.textContent = str;
     return div.innerHTML;
   }
+
+  // 检测扩展上下文是否还有效，失效时停止所有操作
+  function isContextValid() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 包装 sendMessage，上下文失效时静默处理
+  const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = function(...args) {
+    if (!isContextValid()) return Promise.resolve(null);
+    return originalSendMessage(...args).catch(() => null);
+  };
 
   // Start
   init();

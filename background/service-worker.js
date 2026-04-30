@@ -1,5 +1,60 @@
 // VerTab Background Service Worker
 
+// 标签页截图缓存 (tabId -> dataURL)
+const thumbnailCache = new Map();
+
+// 截取当前活跃标签页的截图并缓存
+async function captureTab(tabId, windowId) {
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'jpeg',
+      quality: 40
+    });
+    thumbnailCache.set(tabId, dataUrl);
+    // 限制缓存大小，最多存 50 个
+    if (thumbnailCache.size > 50) {
+      const oldest = thumbnailCache.keys().next().value;
+      thumbnailCache.delete(oldest);
+    }
+  } catch (e) {
+    // 某些页面无法截图（chrome://, 权限不足等），忽略
+  }
+}
+
+// 标签页激活时，延迟截图（等页面渲染完成）
+let activeCaptureInterval = null;
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  // 切换后截图新标签
+  setTimeout(() => {
+    captureTab(activeInfo.tabId, activeInfo.windowId);
+  }, 800);
+
+  // 定期刷新当前标签截图（保持截图为最新状态）
+  clearInterval(activeCaptureInterval);
+  activeCaptureInterval = setInterval(() => {
+    captureTab(activeInfo.tabId, activeInfo.windowId);
+  }, 30000); // 每 30 秒刷新一次
+
+  broadcastToAllTabs({ type: 'TABS_UPDATED' });
+});
+
+// 页面加载完成时，截图当前活跃标签
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active) {
+    setTimeout(() => captureTab(tabId, tab.windowId), 500);
+  }
+  if (changeInfo.title || changeInfo.favIconUrl || changeInfo.status === 'complete' || changeInfo.pinned !== undefined) {
+    broadcastToAllTabs({ type: 'TABS_UPDATED' });
+  }
+});
+
+// 标签页关闭时清除缓存
+chrome.tabs.onRemoved.addListener((tabId) => {
+  thumbnailCache.delete(tabId);
+  broadcastToAllTabs({ type: 'TABS_UPDATED' });
+});
+
 // 点击扩展图标时切换侧边栏
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
@@ -45,6 +100,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
     case 'GET_TABS':
       getAllTabs().then(sendResponse);
+      return true;
+
+    case 'GET_THUMBNAIL':
+      sendResponse({ dataUrl: thumbnailCache.get(message.tabId) || null });
       return true;
 
     case 'GET_TAB_GROUPS':
@@ -171,14 +230,7 @@ async function broadcastToOtherTabs(sender, message) {
 
 // 监听标签页变化事件，通知 sidebar 更新
 chrome.tabs.onCreated.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
-chrome.tabs.onRemoved.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.title || changeInfo.favIconUrl || changeInfo.status === 'complete' || changeInfo.pinned !== undefined) {
-    broadcastToAllTabs({ type: 'TABS_UPDATED' });
-  }
-});
 chrome.tabs.onMoved.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
-chrome.tabs.onActivated.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
 chrome.tabs.onDetached.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
 chrome.tabs.onAttached.addListener(() => broadcastToAllTabs({ type: 'TABS_UPDATED' }));
 

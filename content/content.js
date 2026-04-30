@@ -3,6 +3,11 @@
 (function() {
   'use strict';
 
+  // 扩展上下文失效检测（重载扩展后旧脚本仍在运行时）
+  function isContextValid() {
+    try { return !!chrome.runtime?.id; } catch (e) { return false; }
+  }
+
   let sidebar = null;
   let resizeHandle = null;
   let isVisible = false;
@@ -146,6 +151,7 @@
 
   // 监听来自 background 的消息
   chrome.runtime.onMessage.addListener((message) => {
+    if (!isContextValid()) return;
     switch (message.type) {
       case 'TOGGLE_SIDEBAR':
         toggleSidebar();
@@ -189,6 +195,86 @@
           }
         }
         break;
+    }
+  });
+
+  // 标签页预览浮窗（在主页面中渲染，不在 iframe 中）
+  let previewEl = null;
+
+  function createPreviewEl() {
+    previewEl = document.createElement('div');
+    previewEl.id = 'vertab-preview';
+    previewEl.style.cssText = `
+      position: fixed;
+      z-index: 2147483646;
+      width: 260px;
+      background: #1e1e2e;
+      border: 1px solid #3a3a50;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      overflow: hidden;
+      pointer-events: none;
+      display: none;
+      transition: opacity 0.15s;
+    `;
+    previewEl.innerHTML = `
+      <img id="vertab-preview-img" style="width:100%;height:160px;object-fit:cover;display:none;background:#111;">
+      <div id="vertab-preview-fallback" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;height:160px;text-align:center;gap:8px;">
+        <img id="vertab-preview-favicon" style="width:32px;height:32px;border-radius:6px;">
+        <div id="vertab-preview-title" style="font-size:12px;font-weight:500;color:#e0e0f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;"></div>
+        <div id="vertab-preview-url" style="font-size:11px;color:#6c6c80;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;"></div>
+      </div>
+    `;
+    document.documentElement.appendChild(previewEl);
+  }
+
+  function showPreview(data) {
+    if (!previewEl) createPreviewEl();
+    const img = previewEl.querySelector('#vertab-preview-img');
+    const fallback = previewEl.querySelector('#vertab-preview-fallback');
+
+    if (data.dataUrl) {
+      img.src = data.dataUrl;
+      img.style.display = 'block';
+      fallback.style.display = 'none';
+    } else {
+      img.style.display = 'none';
+      fallback.style.display = 'flex';
+      previewEl.querySelector('#vertab-preview-favicon').src = data.faviconUrl || '';
+      previewEl.querySelector('#vertab-preview-title').textContent = data.title || '';
+      previewEl.querySelector('#vertab-preview-url').textContent = data.hostname || '';
+    }
+
+    // 定位：侧边栏外侧
+    let left, top;
+    top = data.top;
+    if (settings.position === 'left') {
+      left = settings.sidebarWidth + 8;
+    } else {
+      left = window.innerWidth - settings.sidebarWidth - 268;
+    }
+    if (top + 180 > window.innerHeight) {
+      top = window.innerHeight - 180;
+    }
+    if (top < 8) top = 8;
+
+    previewEl.style.top = top + 'px';
+    previewEl.style.left = left + 'px';
+    previewEl.style.display = 'block';
+  }
+
+  function hidePreview() {
+    if (previewEl) {
+      previewEl.style.display = 'none';
+    }
+  }
+
+  // 监听来自 sidebar iframe 的预览请求
+  window.addEventListener('message', (event) => {
+    if (event.data.type === 'SHOW_PREVIEW') {
+      showPreview(event.data);
+    } else if (event.data.type === 'HIDE_PREVIEW') {
+      hidePreview();
     }
   });
 
