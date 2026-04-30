@@ -55,17 +55,26 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   broadcastToAllTabs({ type: 'TABS_UPDATED' });
 });
 
+// 更新扩展图标上的标签页数量角标
+async function updateBadge() {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  chrome.action.setBadgeText({ text: String(tabs.length) });
+  chrome.action.setBadgeBackgroundColor({ color: '#6366f1' });
+  chrome.action.setBadgeTextColor({ color: '#ffffff' });
+}
+updateBadge();
+
 // 点击扩展图标时切换侧边栏
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
-    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SIDEBAR' });
+    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SIDEBAR' }).catch(() => {});
   }
 });
 
 // 快捷键命令
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'toggle-sidebar' && tab.id) {
-    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SIDEBAR' });
+    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SIDEBAR' }).catch(() => {});
   }
 });
 
@@ -207,13 +216,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// 判断标签页是否可以接收消息
+function canSendToTab(tab) {
+  if (!tab.id || !tab.url) return false;
+  const blocked = ['chrome://', 'chrome-extension://', 'edge://', 'about:', 'chrome-search://'];
+  return !blocked.some(prefix => tab.url.startsWith(prefix));
+}
+
 // 广播消息到当前窗口的所有标签页
 async function broadcastToAllTabs(message) {
+  updateBadge();
   const tabs = await chrome.tabs.query({ currentWindow: true });
   for (const tab of tabs) {
-    // 跳过无法注入 content script 的页面
-    if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && !tab.url.startsWith('edge://') && !tab.url.startsWith('about:')) {
-      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    if (canSendToTab(tab)) {
+      try { chrome.tabs.sendMessage(tab.id, message).catch(() => {}); } catch (e) {}
     }
   }
 }
@@ -222,8 +238,8 @@ async function broadcastToAllTabs(message) {
 async function broadcastToOtherTabs(sender, message) {
   const tabs = await chrome.tabs.query({ currentWindow: true });
   for (const tab of tabs) {
-    if (tab.id && tab.id !== sender.tab?.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && !tab.url.startsWith('edge://') && !tab.url.startsWith('about:')) {
-      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    if (tab.id !== sender.tab?.id && canSendToTab(tab)) {
+      try { chrome.tabs.sendMessage(tab.id, message).catch(() => {}); } catch (e) {}
     }
   }
 }

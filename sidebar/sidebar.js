@@ -53,6 +53,8 @@
     tabs = await chrome.runtime.sendMessage({ type: 'GET_TABS' });
     tabGroups = await chrome.runtime.sendMessage({ type: 'GET_TAB_GROUPS' });
     renderTabs();
+    // 更新标签页数量
+    document.getElementById('tab-count').textContent = tabs.length;
   }
 
   async function loadRecentlyClosed() {
@@ -73,6 +75,10 @@
   }
 
   function renderTabs() {
+    // 记住滚动位置
+    const container = document.getElementById('tabs-container');
+    const scrollTop = container ? container.scrollTop : 0;
+
     const pinned = tabs.filter(t => t.pinned);
     const unpinned = tabs.filter(t => !t.pinned);
     const filteredPinned = filterTabs(pinned);
@@ -118,6 +124,11 @@
     if (filteredPinned.length === 0 && filteredUnpinned.length === 0 && searchQuery) {
       allTabsList.innerHTML = '<div class="empty-state">没有匹配的标签页</div>';
     }
+
+    // 恢复滚动位置
+    if (container) {
+      container.scrollTop = scrollTop;
+    }
   }
 
   function getFaviconUrl(tab) {
@@ -134,17 +145,20 @@
       ? `<img class="tab-favicon" src="${faviconSrc}" onerror="this.outerHTML='<div class=\\'tab-favicon-placeholder\\'><svg viewBox=\\'0 0 24 24\\'><path fill=\\'currentColor\\' d=\\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z\\'/></svg></div>'"/>`
       : `<div class="tab-favicon-placeholder"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>`;
 
-    return `
-      <div class="tab-item${tab.active ? ' active' : ''}"
-           data-tab-id="${tab.id}"
-           draggable="true">
-        ${faviconHtml}
-        <span class="tab-title" title="${escapeHtml(tab.title)}">${escapeHtml(tab.title)}</span>
+    const closeBtn = tab.pinned ? '' : `
         <button class="tab-close" data-tab-id="${tab.id}" title="关闭">
           <svg viewBox="0 0 24 24" width="14" height="14">
             <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
-        </button>
+        </button>`;
+
+    return `
+      <div class="tab-item${tab.active ? ' active' : ''}${tab.pinned ? ' pinned' : ''}"
+           data-tab-id="${tab.id}"
+           draggable="true">
+        ${faviconHtml}
+        <span class="tab-title" title="${escapeHtml(tab.title)}">${escapeHtml(tab.title)}</span>
+        ${closeBtn}
       </div>`;
   }
 
@@ -230,7 +244,15 @@
       if (closeBtn) {
         e.stopPropagation();
         const tabId = parseInt(closeBtn.dataset.tabId);
-        chrome.runtime.sendMessage({ type: 'CLOSE_TAB', tabId });
+        const tabEl = closeBtn.closest('.tab-item');
+        if (tabEl) {
+          tabEl.classList.add('removing');
+          tabEl.addEventListener('animationend', () => {
+            chrome.runtime.sendMessage({ type: 'CLOSE_TAB', tabId });
+          }, { once: true });
+        } else {
+          chrome.runtime.sendMessage({ type: 'CLOSE_TAB', tabId });
+        }
         return;
       }
 
@@ -494,6 +516,7 @@
     let currentHoverTabId = null;
 
     document.addEventListener('mouseenter', async (e) => {
+      if (!e.target || !e.target.closest) return;
       const tabItem = e.target.closest('.tab-item');
       if (!tabItem || !tabItem.dataset.tabId) return;
 
@@ -528,6 +551,7 @@
     }, true);
 
     document.addEventListener('mouseleave', (e) => {
+      if (!e.target || !e.target.closest) return;
       const tabItem = e.target.closest('.tab-item');
       if (!tabItem) return;
 
@@ -538,7 +562,7 @@
 
     // 点击标签时也隐藏预览
     document.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.tab-item')) {
+      if (e.target && e.target.closest && e.target.closest('.tab-item')) {
         clearTimeout(hoverTimer);
         currentHoverTabId = null;
         window.parent.postMessage({ type: 'HIDE_PREVIEW' }, '*');

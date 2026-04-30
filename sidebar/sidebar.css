@@ -208,7 +208,38 @@ body {
   cursor: pointer;
   gap: 8px;
   position: relative;
-  transition: background 0.15s;
+  transition: background 0.15s, opacity 0.2s, transform 0.2s;
+  animation: tabSlideIn 0.2s ease;
+}
+
+@keyframes tabSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.tab-item.removing {
+  animation: tabSlideOut 0.2s ease forwards;
+}
+
+@keyframes tabSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 40px;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+    max-height: 0;
+    padding: 0 8px;
+    margin: 0;
+  }
 }
 
 .tab-item:hover {
@@ -311,9 +342,9 @@ body {
 
 /* Recently Closed Section */
 .recently-closed-section {
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
@@ -325,43 +356,41 @@ body {
   opacity: 1;
 }
 
-/* Bottom Bar */
-.bottom-bar {
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
+/* Top Bar */
+.top-bar {
+  padding: 10px 12px 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
 }
 
-.btn-new-tab {
+.top-title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.15s, color 0.15s;
 }
 
-.btn-new-tab:hover {
-  background: var(--bg-hover);
+.top-title-text {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-.bottom-actions {
+.tab-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.top-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .btn-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
