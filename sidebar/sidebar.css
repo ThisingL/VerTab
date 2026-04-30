@@ -227,6 +227,7 @@ body.animations-ready .tab-item {
   }
 }
 
+body.animations-ready .tab-item.removing,
 .tab-item.removing {
   animation: tabSlideOut 0.2s ease forwards;
 }
