@@ -6,7 +6,7 @@
   height: 100vh;
   z-index: 2147483647;
   border: none;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, width 0.25s ease;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
 }
 
@@ -36,22 +36,34 @@
 /* 页面压缩过渡 */
 html.vertab-push-left {
   margin-left: 200px !important;
-  transition: margin-left 0.3s ease !important;
+  width: calc(100vw - 200px) !important;
+  overflow-x: hidden !important;
+  transition: margin-left 0.3s ease, width 0.3s ease !important;
 }
 
 html.vertab-push-right {
   margin-right: 200px !important;
-  transition: margin-right 0.3s ease !important;
+  width: calc(100vw - 200px) !important;
+  overflow-x: hidden !important;
+  transition: margin-right 0.3s ease, width 0.3s ease !important;
 }
 
 html.vertab-no-push {
-  transition: margin-left 0.3s ease, margin-right 0.3s ease !important;
+  transition: margin-left 0.3s ease, margin-right 0.3s ease, width 0.3s ease !important;
 }
 
 /* 页面刷新时跳过过渡动画 */
 html.vertab-no-transition,
 html.vertab-no-transition #vertab-sidebar-container {
   transition: none !important;
+}
+
+/* 侧边栏自身不受 html 宽度约束的影响 */
+html.vertab-push-left #vertab-sidebar-container,
+html.vertab-push-right #vertab-sidebar-container,
+html.vertab-push-left #vertab-resize-handle,
+html.vertab-push-right #vertab-resize-handle {
+  position: fixed;
 }
 
 /* 侧边栏宽度拖拽手柄 */

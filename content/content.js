@@ -11,7 +11,10 @@
   let sidebar = null;
   let resizeHandle = null;
   let isVisible = false;
-  let settings = { position: 'left', sidebarWidth: 200, theme: 'dark' };
+  let settings = { position: 'left', sidebarWidth: 200, theme: 'dark', autoCollapse: 'off' };
+  let isCollapsed = false; // 自动收起状态
+  let collapseTimer = null;
+  let edgeTrigger = null; // 边缘触发区域（完全隐藏模式）
 
   // 初始化
   async function init() {
@@ -19,7 +22,8 @@
     const stored = await chrome.storage.sync.get({
       theme: 'dark',
       position: 'left',
-      sidebarWidth: 200
+      sidebarWidth: 200,
+      autoCollapse: 'off'
     });
     settings = stored;
 
@@ -32,7 +36,13 @@
     if (state.sidebarVisible) {
       // 页面刷新恢复侧边栏时，跳过过渡动画，瞬间显示
       showSidebar(true);
+      // 如果启用了自动收起，初始化后立即收起
+      if (settings.autoCollapse !== 'off') {
+        setTimeout(() => collapseSidebar(), 500);
+      }
     }
+
+    setupAutoCollapse();
   }
 
   function createSidebar() {
@@ -69,7 +79,7 @@
       const onMouseMove = (e) => {
         let diff = e.clientX - startX;
         if (settings.position === 'right') diff = -diff;
-        const newWidth = Math.max(200, Math.min(500, startWidth + diff));
+        const newWidth = Math.max(48, Math.min(500, startWidth + diff));
         updateWidth(newWidth);
         // 实时同步宽度到其他标签页
         chrome.runtime.sendMessage({ type: 'SYNC_WIDTH', width: newWidth });
@@ -92,11 +102,9 @@
     settings.sidebarWidth = width;
     sidebar.style.width = width + 'px';
     resizeHandle.style[settings.position] = width + 'px';
-    document.documentElement.style.setProperty(
-      settings.position === 'left' ? 'margin-left' : 'margin-right',
-      width + 'px',
-      'important'
-    );
+    const prop = settings.position === 'left' ? 'margin-left' : 'margin-right';
+    document.documentElement.style.setProperty(prop, width + 'px', 'important');
+    document.documentElement.style.setProperty('width', `calc(100vw - ${width}px)`, 'important');
   }
 
   function showSidebar(instant) {
@@ -114,11 +122,9 @@
     // 压缩页面内容
     document.documentElement.classList.remove('vertab-no-push', 'vertab-push-left', 'vertab-push-right');
     document.documentElement.classList.add(`vertab-push-${settings.position}`);
-    document.documentElement.style.setProperty(
-      settings.position === 'left' ? 'margin-left' : 'margin-right',
-      settings.sidebarWidth + 'px',
-      'important'
-    );
+    const prop = settings.position === 'left' ? 'margin-left' : 'margin-right';
+    document.documentElement.style.setProperty(prop, settings.sidebarWidth + 'px', 'important');
+    document.documentElement.style.setProperty('width', `calc(100vw - ${settings.sidebarWidth}px)`, 'important');
 
     if (instant) {
       // 强制重绘后恢复过渡，后续操作（如拖拽、切换）仍有动画
@@ -140,6 +146,8 @@
     document.documentElement.classList.add('vertab-no-push');
     document.documentElement.style.removeProperty('margin-left');
     document.documentElement.style.removeProperty('margin-right');
+    document.documentElement.style.removeProperty('width');
+    document.documentElement.style.removeProperty('overflow-x');
 
     chrome.storage.local.set({ sidebarVisible: false });
   }
@@ -191,6 +199,15 @@
           const iframe = sidebar.querySelector('iframe');
           if (iframe && iframe.contentWindow) {
             iframe.contentWindow.postMessage({ type: 'THEME_CHANGED', theme: settings.theme }, '*');
+          }
+        }
+        if (message.settings.autoCollapse !== undefined) {
+          settings.autoCollapse = message.settings.autoCollapse;
+          setupAutoCollapse();
+          if (settings.autoCollapse === 'off' && isCollapsed) {
+            expandSidebar();
+          } else if (settings.autoCollapse !== 'off' && isVisible) {
+            collapseSidebar();
           }
         }
         break;
@@ -291,6 +308,101 @@
       hidePreview();
     }
   });
+
+  // ===== 自动收起功能 =====
+  const COLLAPSE_WIDTH = 48; // 图标栏收起宽度
+  const EDGE_TRIGGER_WIDTH = 6; // 边缘触发区域宽度
+  const COLLAPSE_DELAY = 400; // 鼠标离开后延迟收起
+
+  function collapseSidebar() {
+    if (!isVisible || isCollapsed) return;
+    isCollapsed = true;
+
+    if (settings.autoCollapse === 'icon') {
+      // 收起为图标栏
+      sidebar.style.width = COLLAPSE_WIDTH + 'px';
+      resizeHandle.style[settings.position] = COLLAPSE_WIDTH + 'px';
+      const prop = settings.position === 'left' ? 'margin-left' : 'margin-right';
+      document.documentElement.style.setProperty(prop, COLLAPSE_WIDTH + 'px', 'important');
+      document.documentElement.style.setProperty('width', `calc(100vw - ${COLLAPSE_WIDTH}px)`, 'important');
+    } else if (settings.autoCollapse === 'hide') {
+      // 完全隐藏
+      sidebar.classList.add('vertab-hidden');
+      resizeHandle.classList.add('vertab-hidden');
+      document.documentElement.style.removeProperty('margin-left');
+      document.documentElement.style.removeProperty('margin-right');
+      document.documentElement.style.removeProperty('width');
+      document.documentElement.style.removeProperty('overflow-x');
+    }
+  }
+
+  function expandSidebar() {
+    if (!isVisible || !isCollapsed) return;
+    isCollapsed = false;
+
+    sidebar.classList.remove('vertab-hidden');
+    resizeHandle.classList.remove('vertab-hidden');
+    sidebar.style.width = settings.sidebarWidth + 'px';
+    resizeHandle.style[settings.position] = settings.sidebarWidth + 'px';
+    const prop = settings.position === 'left' ? 'margin-left' : 'margin-right';
+    document.documentElement.style.setProperty(prop, settings.sidebarWidth + 'px', 'important');
+    document.documentElement.style.setProperty('width', `calc(100vw - ${settings.sidebarWidth}px)`, 'important');
+  }
+
+  function setupAutoCollapse() {
+    // 清理之前的事件
+    if (edgeTrigger) {
+      edgeTrigger.remove();
+      edgeTrigger = null;
+    }
+
+    if (settings.autoCollapse === 'off') return;
+    if (!isVisible) return;
+
+    // 鼠标进入侧边栏时展开
+    sidebar.addEventListener('mouseenter', onSidebarMouseEnter);
+    sidebar.addEventListener('mouseleave', onSidebarMouseLeave);
+
+    // 完全隐藏模式：创建边缘触发区域
+    if (settings.autoCollapse === 'hide') {
+      createEdgeTrigger();
+    }
+  }
+
+  function onSidebarMouseEnter() {
+    clearTimeout(collapseTimer);
+    if (isCollapsed && settings.autoCollapse !== 'off') {
+      expandSidebar();
+    }
+  }
+
+  function onSidebarMouseLeave() {
+    clearTimeout(collapseTimer);
+    if (!isCollapsed && settings.autoCollapse !== 'off') {
+      collapseTimer = setTimeout(() => {
+        collapseSidebar();
+      }, COLLAPSE_DELAY);
+    }
+  }
+
+  function createEdgeTrigger() {
+    edgeTrigger = document.createElement('div');
+    edgeTrigger.id = 'vertab-edge-trigger';
+    edgeTrigger.style.cssText = `
+      position: fixed;
+      top: 0;
+      ${settings.position}: 0;
+      width: ${EDGE_TRIGGER_WIDTH}px;
+      height: 100vh;
+      z-index: 2147483647;
+      background: transparent;
+    `;
+    edgeTrigger.addEventListener('mouseenter', () => {
+      clearTimeout(collapseTimer);
+      expandSidebar();
+    });
+    document.documentElement.appendChild(edgeTrigger);
+  }
 
   // 初始化
   init();

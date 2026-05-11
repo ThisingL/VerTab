@@ -54,6 +54,7 @@
     applyTheme(settings.theme);
     document.getElementById('setting-position').value = settings.position;
     document.getElementById('setting-theme').value = settings.theme;
+    document.getElementById('setting-auto-collapse').value = settings.autoCollapse || 'off';
   }
 
   async function loadUIState() {
@@ -500,6 +501,11 @@
       chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', settings: { theme: settings.theme } });
     });
 
+    document.getElementById('setting-auto-collapse').addEventListener('change', (e) => {
+      settings.autoCollapse = e.target.value;
+      chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', settings: { autoCollapse: settings.autoCollapse } });
+    });
+
     // Recently closed toggle
     document.getElementById('toggle-recently-closed').addEventListener('click', () => {
       const list = document.getElementById('recently-closed-tabs');
@@ -688,6 +694,18 @@
     div.textContent = str;
     return div.innerHTML;
   }
+
+  // 监听侧边栏宽度，窄于 120px 时切换为图标模式
+  const iconModeThreshold = 120;
+  const resizeObserver = new ResizeObserver((entries) => {
+    const width = entries[0].contentRect.width;
+    if (width < iconModeThreshold) {
+      document.body.classList.add('icon-mode');
+    } else {
+      document.body.classList.remove('icon-mode');
+    }
+  });
+  resizeObserver.observe(document.body);
 
   // 检测扩展上下文是否还有效，失效时停止所有操作
   function isContextValid() {

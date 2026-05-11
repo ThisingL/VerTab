@@ -342,7 +342,7 @@ body.animations-ready .tab-item.removing,
 }
 
 .pinned-section .tab-item {
-  padding: 5px 8px;
+  padding: 7px 8px;
 }
 
 /* Recently Closed Section */
@@ -608,6 +608,58 @@ body.animations-ready .tab-item.removing,
 
 @keyframes tabSpinner {
   to { transform: rotate(360deg); }
+}
+
+/* 图标模式：宽度很窄时只显示 favicon */
+body.icon-mode .top-bar {
+  justify-content: center;
+  padding: 10px 4px 6px;
+}
+
+body.icon-mode .top-title-text,
+body.icon-mode .tab-count,
+body.icon-mode .tab-title,
+body.icon-mode .tab-close,
+body.icon-mode .search-bar input,
+body.icon-mode .search-icon,
+body.icon-mode .section-title,
+body.icon-mode .section-header .chevron,
+body.icon-mode .tab-group-header span,
+body.icon-mode .tab-group-chevron,
+body.icon-mode #btn-theme,
+body.icon-mode #btn-settings {
+  display: none !important;
+}
+
+body.icon-mode .search-bar {
+  display: none;
+}
+
+body.icon-mode .top-actions {
+  gap: 0;
+}
+
+body.icon-mode .tab-item {
+  justify-content: center;
+  padding: 8px 4px;
+  gap: 0;
+}
+
+body.icon-mode .tab-list {
+  padding: 0 4px;
+}
+
+body.icon-mode .tab-group-header {
+  justify-content: center;
+  padding: 4px;
+}
+
+body.icon-mode .tab-group-tabs {
+  padding-left: 0;
+}
+
+body.icon-mode .pinned-section .tab-item {
+  padding: 6px 4px;
 }
 
 /* Empty State */

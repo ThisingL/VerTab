@@ -195,7 +195,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.sync.get({
         theme: 'dark',
         position: 'left',
-        sidebarWidth: 200
+        sidebarWidth: 200,
+        autoCollapse: 'off'
       }).then(sendResponse);
       return true;
 
